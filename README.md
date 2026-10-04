@@ -75,6 +75,26 @@ Deployment is intentionally manual. The deploy workflow authenticates through Gi
 
 Destruction is a separate manual workflow and requires the operator to type `DESTROY`.
 
+## Deployment validation
+
+The complete delivery path has been tested successfully in a real AWS lab account.
+
+| Validation | Result |
+| --- | --- |
+| Terraform format and validation | ✅ Passed |
+| TFLint | ✅ Passed |
+| Checkov security scan | ✅ Passed |
+| GitHub OIDC → AWS role assumption | ✅ Passed |
+| S3 remote state initialization | ✅ Passed |
+| Plan-only workflow | ✅ Passed |
+| Saved-plan deployment | ✅ Passed |
+| Multi-AZ VPC and S3 lab deployment | ✅ Passed |
+| Follow-up idempotency plan | ✅ **No changes** |
+
+A real partial-apply scenario was also exercised during testing. A deliberately narrow IAM policy initially lacked an S3 read permission required by the Terraform AWS provider. Terraform preserved the successfully created resources in remote state, the permission was corrected, and a fresh plan reconciled the remaining work without rebuilding the network stack.
+
+See [Deployment validation](docs/validation.md) for the full test record.
+
 ## GitHub configuration required
 
 | Type | Name | Example |
@@ -115,4 +135,6 @@ Then follow [docs/deployment.md](docs/deployment.md).
 
 ## Status
 
-**Foundation version:** repository structure, Terraform lab, CI/CD workflows, and documentation.
+**Foundation validated:** CI, OIDC authentication, remote state, plan, apply, and idempotency testing have all completed successfully.
+
+The remaining lifecycle test is the guarded destroy workflow followed by a clean redeployment.
