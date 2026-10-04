@@ -1,41 +1,85 @@
 # Terraform AWS CI/CD Lab
 
-A standalone personal lab that demonstrates a secure, reviewable Terraform delivery workflow for AWS using **GitHub Actions**, **OpenID Connect (OIDC)**, remote state, linting, static security checks, and controlled deployment.
+[![Terraform CI](https://github.com/reranda/terraform-aws-cicd-lab/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/reranda/terraform-aws-cicd-lab/actions/workflows/terraform-ci.yml)
+[![Terraform](https://img.shields.io/badge/Terraform-1.14.6-844FBA?logo=terraform&logoColor=white)](https://developer.hashicorp.com/terraform)
+[![AWS](https://img.shields.io/badge/AWS-IaC%20Lab-232F3E?logo=amazonwebservices&logoColor=white)](https://aws.amazon.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Portfolio note:** This repository is an independent personal project. The architecture, names, code, and configuration are created specifically for this lab and are not copied from an employer or client environment.
+**Production-style Terraform delivery on AWS with GitHub Actions, OIDC, remote state, policy checks, controlled deployment, guarded teardown, and tested failure recovery.**
 
-## What this project demonstrates
+This independent lab demonstrates how I approach cloud infrastructure as an engineering system rather than a collection of Terraform files: **validate early, avoid long-lived credentials, separate CI from privileged deployment, preserve state safely, recover cleanly from partial failure, and prove repeatability through lifecycle testing.**
 
-- Terraform-based AWS infrastructure provisioning
-- Remote Terraform state in Amazon S3 with versioning and native state locking
-- GitHub Actions CI for formatting, validation, linting, and security scanning
-- Short-lived AWS authentication from GitHub Actions through OIDC
-- A controlled plan/apply workflow
-- A separately guarded destroy workflow
-- Secure-by-default AWS networking and S3 configuration
-- Documentation of architecture, security decisions, deployment, and troubleshooting
+## Highlights
+
+| Capability | Implementation |
+| --- | --- |
+| Infrastructure as Code | Terraform with AWS provider |
+| CI | `fmt`, `validate`, TFLint, Checkov |
+| AWS authentication | GitHub OIDC → short-lived STS credentials |
+| Terraform state | Private, encrypted, versioned S3 backend |
+| State locking | Native S3 lock file |
+| Deployment | Manual saved-plan workflow |
+| Destruction | Separate guarded workflow requiring `DESTROY` |
+| AWS architecture | Multi-AZ VPC + secured S3 data bucket |
+| Validation | Create → converge → destroy → redeploy → converge |
+| Cost awareness | No NAT Gateway, EC2, or load balancer required |
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    DEV[Developer] --> GH[GitHub Repository]
-    GH --> CI[CI Workflow]
-    CI --> FMT[terraform fmt / validate]
-    CI --> LINT[TFLint]
-    CI --> SEC[Checkov]
+flowchart TB
+    DEV[Engineer] --> PR[Pull Request]
 
-    GH --> DEPLOY[Manual Deploy Workflow]
+    subgraph GITHUB["GitHub"]
+        PR --> CI[Terraform CI]
+        CI --> FMT[fmt + validate]
+        CI --> LINT[TFLint]
+        CI --> SCAN[Checkov]
+
+        MAIN[main branch] --> DEPLOY[Manual Deploy]
+        MAIN --> DESTROY[Guarded Destroy]
+        DEPLOY --> PLAN[Saved Terraform Plan]
+    end
+
     DEPLOY --> OIDC[GitHub OIDC]
-    OIDC --> ROLE[AWS IAM Role]
-    ROLE --> TF[Terraform]
-    TF --> AWS[AWS Lab Resources]
-    TF <--> STATE[S3 Remote State + Lock File]
+    DESTROY --> OIDC
+
+    subgraph AWS["AWS"]
+        OIDC --> IAM[IAM Deployment Role]
+        IAM --> TF[Terraform]
+        TF <--> STATE[(S3 Remote State)]
+        TF --> VPC[VPC across 2 AZs]
+        TF --> DATA[(Secured S3 Data Bucket)]
+    end
+
+    PLAN --> TF
 ```
 
-The AWS lab stack creates a small multi-AZ VPC layout and a secured S3 data bucket. It deliberately avoids NAT Gateways, EC2 instances, load balancers, and other continuously billable resources.
+The infrastructure layer creates a small two-AZ VPC with public and private subnets plus a protected S3 data bucket. The design deliberately avoids continuously billed components such as NAT Gateways, EC2 instances, and load balancers.
 
-## Repository layout
+For the detailed network and delivery design, see [Architecture](docs/architecture.md).
+
+## What this project proves
+
+This repository has been exercised end to end against a real AWS lab account—not just statically validated.
+
+- ✅ Terraform formatting and validation
+- ✅ TFLint
+- ✅ Checkov
+- ✅ GitHub OIDC authentication
+- ✅ Remote S3 state
+- ✅ Saved-plan deployment
+- ✅ Multi-AZ AWS provisioning
+- ✅ Zero-change/idempotency validation
+- ✅ Guarded destroy
+- ✅ Backend preservation after destroy
+- ✅ Clean redeployment from empty state
+- ✅ Final zero-change convergence
+- ✅ Recovery from a real partial-apply/IAM-permission failure
+
+See [Deployment Validation](docs/validation.md) for the full test record and lessons learned.
+
+## Repository structure
 
 ```text
 .
@@ -47,87 +91,100 @@ The AWS lab stack creates a small multi-AZ VPC layout and a secured S3 data buck
 ├── backend-bootstrap/
 ├── infrastructure/
 ├── docs/
+│   ├── architecture.md
+│   ├── aws-oidc-setup.md
+│   ├── deployment.md
+│   ├── security.md
+│   ├── troubleshooting.md
+│   └── validation.md
 ├── .gitignore
 ├── .tflint.hcl
 ├── LICENSE
 └── README.md
 ```
 
-## CI/CD design
+## Delivery workflow
 
-### Pull requests and pushes
+### CI: no AWS credentials
 
-The CI workflow runs without AWS credentials and checks:
+Pull requests and pushes to `main` run:
 
-1. `terraform fmt`
+1. `terraform fmt -check -recursive`
 2. `terraform init -backend=false`
 3. `terraform validate`
 4. TFLint
 5. Checkov
 
-This keeps normal code validation separate from AWS deployment permissions.
+The CI job has no AWS deployment credentials.
 
-### Deployment
+### Deploy: short-lived AWS credentials
 
-Deployment is intentionally manual. The deploy workflow authenticates through GitHub OIDC, creates a saved plan, stores it as a short-lived artifact, and applies that exact plan only when **Apply changes** is explicitly enabled.
+Deployment is intentionally manual:
 
-### Destruction
+1. GitHub requests an OIDC token.
+2. AWS validates the repository/workflow identity.
+3. STS issues short-lived credentials for a dedicated IAM role.
+4. Terraform initializes against the S3 backend.
+5. Terraform creates and uploads a saved plan.
+6. Apply consumes that exact plan only when explicitly enabled.
 
-Destruction is a separate manual workflow and requires the operator to type `DESTROY`.
+### Destroy: separate safety path
 
-## Deployment validation
+Destruction is isolated in its own workflow and requires the exact confirmation value:
 
-The complete delivery lifecycle has been tested successfully in a real AWS lab account.
+```text
+DESTROY
+```
 
-| Validation | Result |
+The disposable infrastructure is removed while the separately managed Terraform backend remains protected.
+
+## Security design
+
+- No static AWS access keys in GitHub.
+- OIDC trust is restricted to this repository and approved deployment contexts.
+- Deployment uses a dedicated IAM role rather than administrator access.
+- Terraform state is private, encrypted, versioned, and lock-protected.
+- S3 Block Public Access is enabled.
+- The VPC default security group is restricted.
+- Apply and destroy are never triggered automatically by pull requests.
+- Checkov exceptions are narrow and documented with reasons.
+- `.gitignore` excludes state, plans, and normal `.tfvars` files.
+
+See [Security Decisions](docs/security.md).
+
+## Failure recovery demonstrated
+
+During validation, an intentionally narrow IAM policy exposed a missing S3 metadata-read permission during Apply.
+
+Instead of deleting infrastructure manually or abandoning state, the recovery process was:
+
+1. inspect the failed Actions job,
+2. identify the missing least-privilege permission,
+3. verify already-created resources in remote state,
+4. update the IAM role,
+5. create a **fresh** Terraform plan,
+6. allow Terraform to reconcile the remaining work.
+
+The network stack was preserved, the affected empty lab bucket was safely replaced after being marked tainted, and the final environment converged successfully.
+
+That scenario is documented in [Troubleshooting](docs/troubleshooting.md).
+
+## Documentation
+
+| Document | Purpose |
 | --- | --- |
-| Terraform format and validation | ✅ Passed |
-| TFLint | ✅ Passed |
-| Checkov security scan | ✅ Passed |
-| GitHub OIDC → AWS role assumption | ✅ Passed |
-| S3 remote state initialization | ✅ Passed |
-| Plan-only workflow | ✅ Passed |
-| Saved-plan deployment | ✅ Passed |
-| Multi-AZ VPC and S3 lab deployment | ✅ Passed |
-| Initial idempotency plan | ✅ **No changes** |
-| Guarded destroy workflow | ✅ **18 destroyed** |
-| Remote infrastructure state after destroy | ✅ Empty |
-| Terraform backend preserved after destroy | ✅ Passed |
-| Clean redeployment from empty state | ✅ **18 added** |
-| Final idempotency plan | ✅ **No changes** |
+| [Architecture](docs/architecture.md) | Delivery and AWS design |
+| [AWS OIDC Setup](docs/aws-oidc-setup.md) | GitHub → AWS trust configuration |
+| [Deployment](docs/deployment.md) | Bootstrap, plan, apply, destroy |
+| [Security](docs/security.md) | Security decisions and trade-offs |
+| [Validation](docs/validation.md) | End-to-end lifecycle test record |
+| [Troubleshooting](docs/troubleshooting.md) | Failure modes and recovery guidance |
 
-A real partial-apply scenario was also exercised during testing. A deliberately narrow IAM policy initially lacked an S3 read permission required by the Terraform AWS provider. Terraform preserved the successfully created resources in remote state, the permission was corrected, and a fresh plan reconciled the remaining work without rebuilding the network stack.
+## Cost-conscious design
 
-See [Deployment validation](docs/validation.md) for the full test record.
+The lab intentionally avoids NAT Gateways, EC2 instances, load balancers, and other continuously billed compute/network resources.
 
-## GitHub configuration required
-
-| Type | Name | Example |
-| --- | --- | --- |
-| Variable | `AWS_REGION` | `eu-west-2` |
-| Variable | `TF_STATE_BUCKET` | `eranda-tf-state-unique-suffix` |
-| Variable | `DEMO_BUCKET_NAME` | `eranda-cicd-lab-unique-suffix` |
-| Secret | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/github-terraform-lab` |
-
-See [AWS OIDC setup](docs/aws-oidc-setup.md) and [Deployment](docs/deployment.md).
-
-## Security choices
-
-- No static AWS access keys are stored in GitHub.
-- GitHub Actions uses OIDC for short-lived AWS credentials.
-- Terraform state uses an encrypted, versioned, private S3 bucket with native lock files.
-- The VPC default security group is emptied.
-- The demo S3 bucket uses encryption, versioning, public access blocking, and lifecycle cleanup.
-- Deployment and destruction are never triggered automatically from pull requests.
-- Checkov exceptions are documented where production controls are intentionally omitted to keep the lab small and inexpensive.
-
-See [docs/security.md](docs/security.md).
-
-## Cost profile
-
-This lab avoids NAT Gateways, EC2 instances, load balancers, and other continuously billed compute/network services. S3 charges depend on the small amount of state/data stored and requests made.
-
-Always review current AWS pricing before deployment.
+The primary recurring usage is small-volume S3 storage/API activity associated with Terraform state and the demonstration bucket. Always review current AWS pricing before running the lab.
 
 ## Quick start
 
@@ -136,8 +193,30 @@ git clone git@github.com:reranda/terraform-aws-cicd-lab.git
 cd terraform-aws-cicd-lab
 ```
 
-Then follow [docs/deployment.md](docs/deployment.md).
+Then follow [Deployment](docs/deployment.md).
 
-## Status
+## Project status
 
-**Full lifecycle validated:** CI, OIDC authentication, remote state, plan, apply, zero-drift convergence, guarded destroy, backend preservation, clean redeployment, and final idempotency testing have all completed successfully.
+**Full lifecycle validated.**
+
+```text
+validate
+   ↓
+plan
+   ↓
+apply
+   ↓
+zero-change verification
+   ↓
+destroy
+   ↓
+backend preserved
+   ↓
+clean redeploy
+   ↓
+final zero-change verification
+```
+
+---
+
+This repository is an independent personal engineering lab. It contains generic lab configuration and does not reproduce employer or client infrastructure.
