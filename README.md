@@ -77,7 +77,7 @@ Destruction is a separate manual workflow and requires the operator to type `DES
 
 ## Deployment validation
 
-The complete delivery path has been tested successfully in a real AWS lab account.
+The complete delivery lifecycle has been tested successfully in a real AWS lab account.
 
 | Validation | Result |
 | --- | --- |
@@ -89,7 +89,12 @@ The complete delivery path has been tested successfully in a real AWS lab accoun
 | Plan-only workflow | ✅ Passed |
 | Saved-plan deployment | ✅ Passed |
 | Multi-AZ VPC and S3 lab deployment | ✅ Passed |
-| Follow-up idempotency plan | ✅ **No changes** |
+| Initial idempotency plan | ✅ **No changes** |
+| Guarded destroy workflow | ✅ **18 destroyed** |
+| Remote infrastructure state after destroy | ✅ Empty |
+| Terraform backend preserved after destroy | ✅ Passed |
+| Clean redeployment from empty state | ✅ **18 added** |
+| Final idempotency plan | ✅ **No changes** |
 
 A real partial-apply scenario was also exercised during testing. A deliberately narrow IAM policy initially lacked an S3 read permission required by the Terraform AWS provider. Terraform preserved the successfully created resources in remote state, the permission was corrected, and a fresh plan reconciled the remaining work without rebuilding the network stack.
 
@@ -135,6 +140,4 @@ Then follow [docs/deployment.md](docs/deployment.md).
 
 ## Status
 
-**Foundation validated:** CI, OIDC authentication, remote state, plan, apply, and idempotency testing have all completed successfully.
-
-The remaining lifecycle test is the guarded destroy workflow followed by a clean redeployment.
+**Full lifecycle validated:** CI, OIDC authentication, remote state, plan, apply, zero-drift convergence, guarded destroy, backend preservation, clean redeployment, and final idempotency testing have all completed successfully.
