@@ -27,7 +27,9 @@ flowchart TB
 
 ## AWS lab architecture
 
-The VPC uses two Availability Zones with two public and two private subnets.
+The VPC uses two explicitly configured Availability Zones with two public and two private subnets.
+
+The Availability Zones are input variables rather than an open-ended `aws_availability_zones` query. That keeps the topology deterministic even if AWS later adds another Availability Zone to the region.
 
 - Public subnets route to an Internet Gateway but do not automatically assign public IPv4 addresses.
 - Private subnets have no Internet default route and no NAT Gateway.
@@ -36,6 +38,6 @@ The VPC uses two Availability Zones with two public and two private subnets.
 
 ## Terraform state
 
-The state bucket is created separately under `backend-bootstrap` and enables versioning, encryption, public-access blocking, and native S3 state locking with `use_lockfile = true`.
+The state bucket is created separately under `backend-bootstrap` and enables versioning, encryption, public-access blocking, native S3 state locking with `use_lockfile = true`, and cleanup of incomplete multipart uploads.
 
 It also uses `prevent_destroy = true` as a guard against accidental removal.

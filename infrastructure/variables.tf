@@ -4,6 +4,17 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
+variable "availability_zones" {
+  description = "Exactly two Availability Zones used by the lab. Update these when changing aws_region."
+  type        = list(string)
+  default     = ["eu-west-2a", "eu-west-2b"]
+
+  validation {
+    condition     = length(var.availability_zones) == 2
+    error_message = "availability_zones must contain exactly two Availability Zones."
+  }
+}
+
 variable "project_name" {
   description = "Name used to identify the lab resources."
   type        = string
