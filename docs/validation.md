@@ -4,7 +4,7 @@
 
 This document records the end-to-end validation performed against the Terraform AWS CI/CD lab.
 
-The objective was to prove that the repository can validate Terraform code, authenticate from GitHub to AWS without long-lived credentials, use remote state safely, deploy the intended infrastructure, recover from a realistic partial failure, and converge to a zero-change plan.
+The objective was to prove that the repository can validate Terraform code, authenticate from GitHub to AWS without long-lived credentials, use remote state safely, deploy the intended infrastructure, recover from a realistic partial failure, destroy the lab cleanly, redeploy from empty state, and converge to a zero-change plan.
 
 ## Validation summary
 
@@ -24,7 +24,12 @@ The objective was to prove that the repository can validate Terraform code, auth
 | Saved plan artifact upload/download | ✅ Passed |
 | Terraform apply | ✅ Passed |
 | Remote-state recovery after partial apply | ✅ Passed |
-| Follow-up idempotency plan | ✅ No changes |
+| Initial idempotency plan | ✅ No changes |
+| Guarded destroy workflow | ✅ 18 destroyed |
+| Remote infrastructure state after destroy | ✅ Empty |
+| Backend state bucket after destroy | ✅ Preserved |
+| Clean redeployment from empty state | ✅ 18 added |
+| Final idempotency plan | ✅ No changes |
 
 ## Tested infrastructure
 
@@ -52,7 +57,7 @@ GitHub Actions successfully exchanged GitHub OIDC tokens for short-lived AWS STS
 Two trust contexts were validated:
 
 1. the `main` branch subject used by the Terraform plan job
-2. the `dev` GitHub Environment subject used by Terraform apply
+2. the `dev` GitHub Environment subject used by Terraform apply and destroy
 
 No long-lived AWS access key or secret access key is stored in GitHub.
 
@@ -67,6 +72,8 @@ The state bucket provides:
 - Block Public Access
 - native Terraform S3 lock-file support
 - lifecycle cleanup for incomplete multipart uploads
+
+The backend is managed separately from the lab infrastructure and remained available throughout the destroy/redeploy test.
 
 ## Partial-apply recovery test
 
@@ -87,7 +94,7 @@ The network stack was retained. The demonstration S3 bucket was marked tainted b
 
 The following apply completed successfully.
 
-## Idempotency test
+## Initial idempotency test
 
 After the successful deployment, the plan-only workflow was run again without changing the configuration.
 
@@ -97,15 +104,81 @@ Terraform returned:
 No changes. Your infrastructure matches the configuration.
 ```
 
-This confirms that the deployed infrastructure and Terraform state converged successfully.
+This confirmed that the deployed infrastructure and Terraform state had converged.
 
-## Next validation
+## Destroy validation
 
-The remaining lifecycle test is:
+The guarded destroy workflow was then run with the exact confirmation value `DESTROY`.
 
-1. run the guarded Terraform Destroy workflow
-2. verify that the main lab resources are removed while the backend state bucket remains protected
-3. perform a clean redeployment
-4. verify another zero-change plan
+Terraform planned:
 
-Completing that sequence will validate the full create → destroy → recreate lifecycle.
+```text
+Plan: 0 to add, 0 to change, 18 to destroy.
+```
+
+and completed with:
+
+```text
+Apply complete! Resources: 0 added, 0 changed, 18 destroyed.
+```
+
+Afterward:
+
+- `terraform state list` returned no managed infrastructure resources
+- the dedicated Terraform backend bucket still existed and remained accessible
+
+This validated the separation between the bootstrap/backend layer and the disposable lab-infrastructure layer.
+
+## Clean redeployment validation
+
+With the infrastructure state empty, the deploy workflow was run again with Apply enabled.
+
+Terraform planned:
+
+```text
+Plan: 18 to add, 0 to change, 0 to destroy.
+```
+
+and completed with:
+
+```text
+Apply complete! Resources: 18 added, 0 changed, 0 destroyed.
+```
+
+This demonstrated that the environment could be recreated cleanly from version-controlled Terraform configuration and remote state.
+
+## Final idempotency test
+
+A final plan-only workflow was run after the clean redeployment.
+
+Terraform returned:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+The final zero-change plan confirms that the recreated infrastructure converged fully to the declared configuration.
+
+## Lifecycle conclusion
+
+The full lifecycle has now been validated successfully:
+
+```text
+validate
+   ↓
+plan
+   ↓
+apply
+   ↓
+zero-change verification
+   ↓
+destroy
+   ↓
+empty infrastructure state
+   ↓
+clean redeploy
+   ↓
+final zero-change verification
+```
+
+This project therefore demonstrates not only initial provisioning, but repeatable convergence, controlled teardown, state preservation, failure recovery, and clean reconstruction.
