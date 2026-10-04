@@ -1,0 +1,2 @@
+aws_region          = "eu-west-2"
+backend_bucket_name = "eranda-tf-state-replace-with-unique-suffix"

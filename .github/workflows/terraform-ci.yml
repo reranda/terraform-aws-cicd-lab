@@ -1,0 +1,58 @@
+name: Terraform CI
+
+"on":
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.6
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
+
+      - name: Initialize backend bootstrap
+        run: terraform -chdir=backend-bootstrap init -backend=false -input=false
+
+      - name: Validate backend bootstrap
+        run: terraform -chdir=backend-bootstrap validate
+
+      - name: Initialize infrastructure without backend
+        run: terraform -chdir=infrastructure init -backend=false -input=false
+
+      - name: Validate infrastructure
+        run: terraform -chdir=infrastructure validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
+
+      - name: Initialize TFLint
+        run: tflint --init --config="${GITHUB_WORKSPACE}/.tflint.hcl"
+
+      - name: Run TFLint
+        run: tflint --recursive --config="${GITHUB_WORKSPACE}/.tflint.hcl"
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: .
+          framework: terraform
+          quiet: true
+          soft_fail: false

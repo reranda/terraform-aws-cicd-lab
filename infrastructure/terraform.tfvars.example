@@ -1,0 +1,5 @@
+aws_region   = "eu-west-2"
+project_name = "terraform-aws-cicd-lab"
+environment  = "dev"
+vpc_cidr     = "10.20.0.0/16"
+bucket_name  = "eranda-cicd-lab-replace-with-unique-suffix"
