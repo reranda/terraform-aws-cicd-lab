@@ -26,34 +26,7 @@ This independent lab demonstrates how I approach cloud infrastructure as an engi
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    DEV[Engineer] --> PR[Pull Request]
-
-    subgraph GITHUB["GitHub"]
-        PR --> CI[Terraform CI]
-        CI --> FMT[fmt + validate]
-        CI --> LINT[TFLint]
-        CI --> SCAN[Checkov]
-
-        MAIN[main branch] --> DEPLOY[Manual Deploy]
-        MAIN --> DESTROY[Guarded Destroy]
-        DEPLOY --> PLAN[Saved Terraform Plan]
-    end
-
-    DEPLOY --> OIDC[GitHub OIDC]
-    DESTROY --> OIDC
-
-    subgraph AWS["AWS"]
-        OIDC --> IAM[IAM Deployment Role]
-        IAM --> TF[Terraform]
-        TF <--> STATE[(S3 Remote State)]
-        TF --> VPC[VPC across 2 AZs]
-        TF --> DATA[(Secured S3 Data Bucket)]
-    end
-
-    PLAN --> TF
-```
+<img width="612" height="512" alt="Untitled Diagram-Page-2" src="https://github.com/user-attachments/assets/9539e748-34e7-4f85-8b3f-56ee3929a811" />
 
 The infrastructure layer creates a small two-AZ VPC with public and private subnets plus a protected S3 data bucket. The design deliberately avoids continuously billed components such as NAT Gateways, EC2 instances, and load balancers.
 
