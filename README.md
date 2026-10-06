@@ -193,3 +193,7 @@ final zero-change verification
 ---
 
 This repository is an independent personal engineering lab. It contains generic lab configuration and does not reproduce employer or client infrastructure.
+
+## Author
+
+Built and maintained by Eranda Welgama as a personal AWS and Terraform engineering lab.
