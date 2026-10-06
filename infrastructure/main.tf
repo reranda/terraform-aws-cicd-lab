@@ -115,6 +115,35 @@ resource "aws_s3_bucket_public_access_block" "lab_data" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_policy" "require_tls" {
+  bucket = aws_s3_bucket.lab_data.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+
+        Action = "s3:*"
+
+        Resource = [
+          aws_s3_bucket.lab_data.arn,
+          "${aws_s3_bucket.lab_data.arn}/*"
+        ]
+
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_s3_bucket_versioning" "lab_data" {
   bucket = aws_s3_bucket.lab_data.id
 
