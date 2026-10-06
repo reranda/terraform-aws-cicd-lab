@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::709872263987:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": [
+            "repo:reranda@39367723/terraform-aws-cicd-lab@1404554131:ref:refs/heads/main",
+            "repo:reranda@39367723/terraform-aws-cicd-lab@1404554131:environment:dev"
+          ]
+        }
+      }
+    }
+  ]
+}
